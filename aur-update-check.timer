@@ -1,0 +1,14 @@
+[Unit]
+Description=Periodic AUR update check (notifies via desktop notification)
+
+[Timer]
+# Shortly after login, then every 6 hours on the clock. Persistent catches runs
+# missed while the machine was off; the random delay avoids hitting the AUR RPC
+# at the same instant as everyone else.
+OnStartupSec=5min
+OnCalendar=*-*-* 00/6:00:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

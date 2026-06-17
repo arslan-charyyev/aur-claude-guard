@@ -1,0 +1,8 @@
+[Unit]
+Description=Check for AUR updates and send a desktop notification
+
+[Service]
+Type=oneshot
+# Ensure notify-send can reach the session notification daemon from the timer.
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+ExecStart=/usr/bin/aur-update-check

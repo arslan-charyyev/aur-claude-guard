@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# aur-update-check — desktop-notify when AUR package updates are available.
+# Replaces the pamac tray's AUR update notification now that AUR is handled by
+# the guarded `yay` instead of pamac. Read-only; applies nothing.
+set -uo pipefail
+
+# `yay -Qua` queries the AUR for newer versions of installed foreign packages.
+# In a script `yay` is the real binary (the guard function isn't loaded), and
+# -Qua is read-only, so no review is needed here.
+updates="$(timeout 60 yay -Qua 2>/dev/null)"
+count="$(printf '%s\n' "$updates" | grep -c .)"
+
+[ "$count" -eq 0 ] && exit 0
+
+names="$(printf '%s\n' "$updates" | awk 'NF{print "• " $1}')"
+title="$count AUR update$([ "$count" -ne 1 ] && echo s) available"
+body="$names
+
+Apply with:  yay -Syu   (reviewed by aur-guard)"
+
+# -t 0 = stay until dismissed; replace prior notification via a fixed id-hint.
+notify-send \
+  --app-name="AUR updates" \
+  --icon=system-software-update \
+  --urgency=normal \
+  --expire-time=0 \
+  --hint=string:x-kde-display-appname:AUR \
+  "$title" "$body"

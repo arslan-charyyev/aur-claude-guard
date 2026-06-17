@@ -1,0 +1,29 @@
+post_install() {
+  cat <<'MSG'
+==> aur-claude-guard installed.
+
+Per-user activation (run as your normal user, NOT root):
+
+  1) Load the yay guard in bash. Add this line to ~/.bashrc if it isn't there:
+       source /usr/share/aur-claude-guard/shell-hook.bash
+  2) Enable AUR update notifications:
+       systemctl --user enable --now aur-update-check.timer
+  3) Make sure the 'claude' CLI is on your PATH.
+  4) Disable AUR support in pamac, so the only path to the AUR is the guarded yay.
+
+Docs: /usr/share/doc/aur-claude-guard/README.md
+(If you installed via install.sh, steps 1 and 2 are already done.)
+MSG
+}
+
+post_upgrade() {
+  echo "==> aur-claude-guard upgraded. If a systemd unit changed, run: systemctl --user daemon-reload"
+}
+
+post_remove() {
+  cat <<'MSG'
+==> aur-claude-guard removed. To finish cleaning up, run as your user:
+      systemctl --user disable --now aur-update-check.timer
+    and remove the 'source /usr/share/aur-claude-guard/shell-hook.bash' line from ~/.bashrc.
+MSG
+}
