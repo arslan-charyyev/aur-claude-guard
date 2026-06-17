@@ -9,7 +9,7 @@ LLM-based pre-install security review of AUR build scripts, packaged for pacman.
 | `/usr/bin/aur-claude-review` | The analyzer. Downloads an AUR package's build files with `yay -G` (no building), feeds `PKGBUILD` + `*.install` + other repo files to `claude -p`, parses the verdict. Recurses into AUR dependencies (static `.SRCINFO` parse — never sources the PKGBUILD). Caches verdicts by content hash. Fails closed. Hardened against prompt injection. |
 | `/usr/bin/aur-update-check` | Runs `yay -Qua` and desktop-notifies when AUR updates exist. Read-only. |
 | `/usr/share/aur-claude-guard/shell-hook.bash` | The `yay` wrapper. Source it from `~/.bashrc`; it gates every install/upgrade that pulls AUR packages on the review. |
-| `/usr/lib/systemd/user/aur-update-check.{service,timer}` | User timer that runs the update check ~5 min after login and every 6 h. |
+| `/usr/lib/systemd/user/aur-update-check.{service,timer}` | User timer that runs the update check ~5 min after login and once a day. |
 | `/usr/share/doc/aur-claude-guard/README.md` | This file. |
 
 ## Install
