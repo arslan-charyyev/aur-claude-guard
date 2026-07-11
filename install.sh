@@ -5,7 +5,11 @@ set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"
 
 echo "==> Building and installing the package (pacman will ask for your sudo password)…"
-makepkg -sif
+# makepkg's -i installs the built package immediately, so the .pkg.tar.zst is a
+# throwaway. Write it to a temp dir (cleaned on exit) instead of littering the repo.
+build_tmp="$(mktemp -d)"
+trap 'rm -rf "$build_tmp"' EXIT
+PKGDEST="$build_tmp" makepkg -sif
 
 echo "==> Removing superseded user-space copies (if any)…"
 rm -f ~/.local/bin/aur-claude-review ~/.local/bin/aur-update-check

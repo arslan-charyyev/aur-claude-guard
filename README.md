@@ -15,15 +15,16 @@ LLM-based pre-install security review of AUR build scripts, packaged for pacman.
 ## Install
 
 ```
-./install.sh           # builds, installs (sudo), and does the per-user activation below
+./install.sh
 ```
 
-Or manually: `makepkg -si`, then the two per-user steps:
+It builds the package, installs it (pacman asks for sudo), enables the per-user update-check timer, and reminds you to add the shell guard to your `~/.bashrc`:
 
 ```
-echo 'source /usr/share/aur-claude-guard/shell-hook.bash' >> ~/.bashrc
-systemctl --user enable --now aur-update-check.timer
+source /usr/share/aur-claude-guard/shell-hook.bash
 ```
+
+Add that line, then open a new terminal (or `source ~/.bashrc`) so the `yay` guard loads.
 
 The `claude` CLI must be on your PATH, and **AUR support should be disabled in pamac** so the only path to the AUR is the guarded `yay` (pamac builds AUR packages with its own engine and is not gated — see Limitations).
 
@@ -50,7 +51,7 @@ aur-claude-review --dir ~/build/some-pkg    # review an already-downloaded build
 ## Knobs (environment variables)
 
 - `AURGUARD=off yay …` — bypass the guard for one command.
-- `AUR_REVIEW_MODEL` — model for `claude --model` (default `claude-sonnet-4-6`).
+- `AUR_REVIEW_MODEL` — model for `claude --model` (default `claude-sonnet-5`).
 - `AUR_REVIEW_NO_CACHE=1` — ignore the verdict cache.
 - `AUR_REVIEW_RECURSE=0` — review only the named package, not its AUR deps.
 - `AUR_REVIEW_CACHE` — cache dir (default `~/.cache/aur-claude-review`).
@@ -72,7 +73,7 @@ Apply updates with `yay -Syu`, which goes through the guard.
 
 ## Editing / iterating
 
-The repo is the single source of truth. After changing a script, rebuild and reinstall: `./install.sh` (or `makepkg -si`). Verify the installed files match the package with `pacman -Qkk aur-claude-guard`, and see what the package owns with `pacman -Ql aur-claude-guard`. Bump `pkgrel` (or `pkgver`) in the PKGBUILD when you want pacman to treat it as a new version.
+The repo is the single source of truth. After changing a script, rebuild and reinstall: `./install.sh`. Verify the installed files match the package with `pacman -Qkk aur-claude-guard`, and see what the package owns with `pacman -Ql aur-claude-guard`. Bump `pkgrel` (or `pkgver`) in the PKGBUILD when you want pacman to treat it as a new version.
 
 ## Limitations
 
