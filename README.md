@@ -41,6 +41,8 @@ yay -S some-aur-pkg      # reviewed before build; aborts if FAIL
 yay -Syu                 # pending AUR updates reviewed before build
 ```
 
+The password prompt comes **first**, before the review: the guard runs `sudo -v` up front and refreshes the timestamp while the review runs, so you can start `yay -Syu` and walk away instead of coming back to find it waiting on a password. If pre-authentication fails (not in sudoers, wrong password) the guard just warns and carries on — `yay` prompts on its own schedule as before. Note that `yay` itself may still ask its own questions later (diffs to show, "Proceed with installation?"), and a review that *can't complete* falls back to an interactive override prompt.
+
 Manual:
 
 ```
@@ -51,6 +53,8 @@ aur-claude-review --dir ~/build/some-pkg    # review an already-downloaded build
 ## Knobs (environment variables)
 
 - `AURGUARD=off yay …` — bypass the guard for one command.
+- `AURGUARD_SUDO_PRIME=0` — don't pre-authenticate; let `yay` ask for the password whenever it wants.
+- `AURGUARD_SUDO` — privilege-escalation binary to pre-authenticate with (default: `sudo`, falling back to `doas`).
 - `AUR_REVIEW_MODEL` — model for `claude --model` (default `claude-sonnet-5`).
 - `AUR_REVIEW_NO_CACHE=1` — ignore the verdict cache.
 - `AUR_REVIEW_RECURSE=0` — review only the named package, not its AUR deps.
