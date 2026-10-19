@@ -14,7 +14,7 @@
 # Exit codes: 0 = all PASS (or nothing to review)   1 = a FAIL   2 = review error
 #
 # Env:
-#   AUR_REVIEW_MODEL      model passed to `claude --model` (default: CLI default)
+#   AUR_REVIEW_MODEL      model passed to `claude --model` (default: claude-opus-5-5)
 #   AUR_REVIEW_CACHE      cache dir (default: ~/.cache/aur-claude-review)
 #   AUR_REVIEW_MAX_BYTES  per-file content cap (default: 65536)
 #   AUR_REVIEW_NO_CACHE=1 bypass the verdict cache
@@ -27,7 +27,7 @@ MAX_BYTES="${AUR_REVIEW_MAX_BYTES:-65536}"
 RECURSE="${AUR_REVIEW_RECURSE:-1}"
 USE_CACHE=1; [ "${AUR_REVIEW_NO_CACHE:-0}" = "1" ] && USE_CACHE=0
 
-AUR_REVIEW_MODEL="${AUR_REVIEW_MODEL:-claude-sonnet-5}"
+AUR_REVIEW_MODEL="${AUR_REVIEW_MODEL:-claude-opus-5-5}"
 MODEL_FLAG=(--model "$AUR_REVIEW_MODEL")
 
 mkdir -p "$CACHE_DIR" 2>/dev/null || true

@@ -55,7 +55,7 @@ aur-claude-review --dir ~/build/some-pkg    # review an already-downloaded build
 - `AURGUARD=off yay …` — bypass the guard for one command.
 - `AURGUARD_SUDO_PRIME=0` — don't pre-authenticate; let `yay` ask for the password whenever it wants.
 - `AURGUARD_SUDO` — privilege-escalation binary to pre-authenticate with (default: `sudo`, falling back to `doas`).
-- `AUR_REVIEW_MODEL` — model for `claude --model` (default `claude-sonnet-5`).
+- `AUR_REVIEW_MODEL` — model for `claude --model` (default `claude-opus-5-5`).
 - `AUR_REVIEW_NO_CACHE=1` — ignore the verdict cache.
 - `AUR_REVIEW_RECURSE=0` — review only the named package, not its AUR deps.
 - `AUR_REVIEW_CACHE` — cache dir (default `~/.cache/aur-claude-review`).
