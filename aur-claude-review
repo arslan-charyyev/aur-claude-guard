@@ -8,8 +8,8 @@
 # treated as a block).
 #
 # Usage:
-#   aur-claude-review PKG [PKG...]      review AUR packages by name (uses `yay -G`)
-#   aur-claude-review --dir PATH        review an already-downloaded build dir
+#   aur-claude-review PKG [PKG...]      review AUR packages by name (clones them from the AUR)
+#   aur-claude-review --dir PATH        review an already-downloaded build dir (the makepkg gate uses this)
 #
 # Exit codes: 0 = all PASS (or nothing to review)   1 = a FAIL   2 = review error
 #
@@ -38,8 +38,11 @@ c_red=$'\033[31m'; c_grn=$'\033[32m'; c_ylw=$'\033[33m'; c_dim=$'\033[2m'; c_rst
 err()  { printf '%s\n' "$*" >&2; }
 info() { printf '%s\n' "${c_dim}$*${c_rst}" >&2; }
 
+# A GUI app such as Pamac can start makepkg with a shorter PATH than a login
+# shell has, so also look where the claude installer puts the CLI.
+command -v claude >/dev/null 2>&1 || PATH="$PATH:$HOME/.local/bin:$HOME/.claude/local"
 command -v claude >/dev/null 2>&1 || { err "${c_red}aur-claude-review: 'claude' CLI not found in PATH${c_rst}"; exit 2; }
-command -v yay    >/dev/null 2>&1 || { err "${c_red}aur-claude-review: 'yay' not found in PATH${c_rst}"; exit 2; }
+command -v git    >/dev/null 2>&1 || { err "${c_red}aur-claude-review: 'git' not found in PATH${c_rst}"; exit 2; }
 
 # ---------------------------------------------------------------------------
 # Build the prompt: strict instructions sandwiched around untrusted file data.
@@ -110,18 +113,45 @@ VERDICT line.
 EOF
 
 # ---------------------------------------------------------------------------
+# reviewable_files <dir>  ->  NUL-separated paths relative to <dir>, sorted
+# ---------------------------------------------------------------------------
+reviewable_files() {
+  local dir="$1" top
+  # In a git clone, only the tracked files: what the AUR maintainer published.
+  # A build dir also collects downloaded sources and the extracted src/ tree,
+  # which would change the cache key on every makepkg run of the same build.
+  if top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" && [ "$top" -ef "$dir" ]; then
+    git -C "$dir" ls-files -z
+  else
+    ( cd "$dir" && find . -path ./.git -prune -o -type f -printf '%P\0' ) | sort -z
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # collect_files <dir>  ->  prints a labeled, size-capped blob of reviewable files
 # ---------------------------------------------------------------------------
 collect_files() {
   local dir="$1" f rel size
-  # Critical execution surface first, then everything else (sorted, deduped).
-  {
-    find "$dir" -maxdepth 1 -type f \( -name PKGBUILD -o -name '*.install' \) -print
-    find "$dir" -path '*/.git' -prune -o -type f -print
-  } 2>/dev/null | awk '!seen[$0]++' | while IFS= read -r f; do
-    rel="${f#"$dir"/}"
-    [ "$rel" = ".SRCINFO" ] && continue   # metadata; shown separately is noisy
-    case "$rel" in .git/*) continue;; esac
+  local -a first=() rest=()
+  # Critical execution surface first, then everything else.
+  while IFS= read -r -d '' rel; do
+    case "$rel" in
+      .SRCINFO) ;;                    # metadata; shown separately is noisy
+      PKGBUILD) first+=("$rel") ;;
+      */*)      rest+=("$rel") ;;
+      *.install) first+=("$rel") ;;
+      *)        rest+=("$rel") ;;
+    esac
+  done < <(reviewable_files "$dir" 2>/dev/null)
+
+  for rel in ${first[@]+"${first[@]}"} ${rest[@]+"${rest[@]}"}; do
+    f="$dir/$rel"
+    # Never follow a symlink: a link to ~/.ssh/id_rsa would send that file.
+    if [ -L "$f" ]; then
+      printf -- '----- SYMLINK PRESENT (target not read): %s -> %s -----\n' "$rel" "$(readlink -- "$f")"
+      continue
+    fi
+    [ -f "$f" ] || continue           # tracked but deleted in the work tree
     size=$(stat -c %s "$f" 2>/dev/null || echo 0)
     if grep -Iq . "$f" 2>/dev/null; then
       printf -- '----- FILE: %s (%s bytes) -----\n' "$rel" "$size"
@@ -237,8 +267,7 @@ review_pkg() {
   if grep -qxF "$pkg" "$SEEN_FILE" 2>/dev/null; then return 0; fi
   printf '%s\n' "$pkg" >> "$SEEN_FILE"
 
-  # Official repo packages are signed and trusted — skip them. This also stops
-  # `yay -G` from fetching repo PKGBUILDs (it will, for repo packages), so only
+  # Official repo packages are signed and trusted — skip them, so only
   # genuinely AUR-only packages get reviewed.
   if pacman -Si -- "$pkg" >/dev/null 2>&1; then
     [ "$depth" = 0 ] && info "[$pkg] official repo package (skipping review)"
@@ -252,7 +281,10 @@ review_pkg() {
   local attempt fetched=0
   for attempt in 1 2 3; do
     rm -rf "$pkgdir" 2>/dev/null
-    if ( cd "$WORKDIR" && command yay -G "$pkg" >/dev/null 2>&1 ) && [ -d "$pkgdir" ]; then
+    # The AUR serves an empty repository for an unknown name, so the clone
+    # counts only if it has a PKGBUILD.
+    if GIT_TERMINAL_PROMPT=0 git clone -q --depth=1 "https://aur.archlinux.org/$pkg.git" "$pkgdir" >/dev/null 2>&1 \
+       && [ -f "$pkgdir/PKGBUILD" ]; then
       fetched=1; break
     fi
     sleep 2
