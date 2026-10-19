@@ -2,25 +2,23 @@ post_install() {
   cat <<'MSG'
 ==> aur-claude-guard installed.
 
-Per-user activation (run as your normal user, NOT root):
+Every makepkg run now reviews AUR build files with claude before it reads the
+PKGBUILD. This covers yay, paru, and Pamac's Add/Remove Software alike.
 
-  1) Load the yay guard in bash. Add this line to ~/.bashrc if it isn't there:
-       source /usr/share/aur-claude-guard/shell-hook.bash
-  2) Make sure the 'claude' CLI is on your PATH.
-  3) Install and upgrade AUR packages with yay only. Pamac may notify you
-     about AUR updates, but its Apply button builds them without the review.
+  - Make sure the 'claude' CLI is installed and logged in for your user.
+  - Bypass the review once with: AURGUARD=off yay -S <pkg>
 
 Docs: /usr/share/doc/aur-claude-guard/README.md
-(If you installed via install.sh, step 1 is already done.)
 MSG
 }
 
 post_upgrade() {
-  echo "==> aur-claude-guard upgraded. If a systemd unit changed, run: systemctl --user daemon-reload"
-}
-
-post_remove() {
-  cat <<'MSG'
-==> aur-claude-guard removed. To finish cleaning up, remove the 'source /usr/share/aur-claude-guard/shell-hook.bash' line from ~/.bashrc.
+  # 2.0.0 replaced the yay shell hook with the makepkg gate.
+  if (( $(vercmp "$2" 2.0.0) < 0 )); then
+    cat <<'MSG'
+==> aur-claude-guard now gates makepkg itself, so it also covers Pamac.
+    The yay shell hook is gone: remove the line that sources
+    /usr/share/aur-claude-guard/shell-hook.bash from ~/.bashrc.
 MSG
+  fi
 }

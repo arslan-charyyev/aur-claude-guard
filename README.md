@@ -1,13 +1,16 @@
 # aur-claude-guard
 
-LLM-based pre-install security review of AUR build scripts, packaged for pacman. It defends against the AUR supply-chain attacks that hide malware in `PKGBUILD` and `*.install` files — code that runs as your user during `makepkg` and as **root** during the pacman step. Before `yay` builds anything, the build files are sent to the `claude` CLI, which returns a strict `VERDICT: PASS` / `VERDICT: FAIL`; a FAIL aborts the install.
+LLM-based pre-build security review of AUR build scripts, packaged for pacman. It defends against the AUR supply-chain attacks that hide malware in `PKGBUILD` and `*.install` files — code that runs as your user during `makepkg` and as **root** during the pacman step. Before `makepkg` reads a PKGBUILD, the build files are sent to the `claude` CLI, which returns a strict `VERDICT: PASS` / `VERDICT: FAIL`; anything but a PASS stops the build.
+
+The gate sits in `makepkg` itself, so it does not matter which tool starts the build: `yay`, `paru`, Pamac (Add/Remove Software, GUI or `pamac-cli`), or a manual `makepkg` all go through it, in any shell.
 
 ## What's in the package
 
 | Installed path | Purpose |
 | --- | --- |
-| `/usr/bin/aur-claude-review` | The analyzer. Downloads an AUR package's build files with `yay -G` (no building), feeds `PKGBUILD` + `*.install` + other repo files to `claude -p`, parses the verdict. Recurses into AUR dependencies (static `.SRCINFO` parse — never sources the PKGBUILD). Caches verdicts by content hash. Fails closed. Hardened against prompt injection. |
-| `/usr/share/aur-claude-guard/shell-hook.bash` | The `yay` wrapper. Source it from `~/.bashrc`; it gates every install/upgrade that pulls AUR packages on the review. |
+| `/etc/makepkg.conf.d/aur-claude-guard.conf` | Drop-in that makepkg loads with its configuration. It sources the gate. |
+| `/usr/share/aur-claude-guard/makepkg-gate.sh` | The gate. Runs `aur-claude-review --dir` on the build directory before makepkg reads the PKGBUILD, and stops makepkg unless the verdict is PASS. |
+| `/usr/bin/aur-claude-review` | The analyzer. Feeds `PKGBUILD` + `*.install` + the other package files to `claude -p` and parses the verdict. Caches verdicts by content hash. Fails closed. Hardened against prompt injection. |
 | `/usr/share/doc/aur-claude-guard/README.md` | This file. |
 
 ## Install
@@ -16,50 +19,58 @@ LLM-based pre-install security review of AUR build scripts, packaged for pacman.
 ./install.sh
 ```
 
-It builds the package, installs it (pacman asks for sudo), and reminds you to add the shell guard to your `~/.bashrc`:
+It builds the package, installs it with `run0 pacman -U` (run0 asks for authentication), and removes the leftovers of earlier versions. There is no per-user activation step: the next `makepkg` run is gated. The `claude` CLI must be installed and logged in for the user who builds packages.
 
-```
-source /usr/share/aur-claude-guard/shell-hook.bash
-```
+## How it works
 
-Add that line, then open a new terminal (or `source ~/.bashrc`) so the `yay` guard loads.
+makepkg loads `/etc/makepkg.conf.d/*.conf` after it parses its arguments and before it reads the PKGBUILD, so the gate runs before any code from the package. For example, when you click Apply on an AUR update in Pamac:
 
-The `claude` CLI must be on your PATH. **Install and upgrade AUR packages only with `yay`.** Pamac can keep AUR support on so that it notifies you about AUR updates, but apply those updates with `yay -Syu`, not with Pamac's Apply button: Pamac builds AUR packages with its own engine, so the review does not run (see Limitations).
+1. Pamac clones the package from `https://aur.archlinux.org/<pkg>.git` into its build directory. Cloning runs no package code.
+2. Pamac runs `makepkg --printsrcinfo` there. makepkg loads the gate, and the gate sends the build files to `claude`.
+3. On a PASS, makepkg continues. Pamac's next makepkg calls for the same build find the verdict in the cache and do not call `claude` again. On a FAIL, makepkg exits, and Pamac reports that the package failed to build. Its details pane shows the reason.
 
-## How it decides what to review
+What the gate reviews:
 
-For each candidate package it skips anything in the official signed repos (`pacman -Si`), confirms the rest are genuinely in the AUR (AUR RPC), and only then downloads and reviews them. Official-repo and virtual/`provides` dependencies are skipped. A download that fails for a package that *does* exist in the AUR is treated as a review error (fail-closed), never a silent skip.
+- **Reviewed:** a directory that is a git clone from `aur.archlinux.org`, or a directory that is not the top of a git clone at all (an AUR snapshot tarball, a loose PKGBUILD).
+- **Skipped:** the clone of any other git repository, such as an official package from `gitlab.archlinux.org` or this project; the fakeroot re-run that makepkg does for `package()`; and a makepkg run as root, which makepkg refuses anyway.
+
+In a git clone, only the tracked files are reviewed: what the AUR maintainer published. Downloaded sources and the extracted `src/` tree are not sent. A symlink is shown to the model as a link; its target is never read.
+
+Each package is reviewed when its own build starts, so a `yay -Syu` that builds three AUR packages makes three reviews, one before each build. A FAIL stops that build; packages built earlier in the same run stay upgraded.
 
 ## Usage
 
-Automatic once the hook is sourced:
+Automatic:
 
 ```
-yay -S some-aur-pkg      # reviewed before build; aborts if FAIL
-yay -Syu                 # pending AUR updates reviewed before build
+yay -S some-aur-pkg      # reviewed when makepkg starts; stops if FAIL
+yay -Syu                 # each AUR update reviewed before its build
+pamac build some-aur-pkg # same gate
 ```
 
-The password prompt comes **first**, before the review: the guard runs `sudo -v` up front and refreshes the timestamp while the review runs, so you can start `yay -Syu` and walk away instead of coming back to find it waiting on a password. If pre-authentication fails (not in sudoers, wrong password) the guard just warns and carries on — `yay` prompts on its own schedule as before. Note that `yay` itself may still ask its own questions later (diffs to show, "Proceed with installation?"), and a review that *can't complete* falls back to an interactive override prompt.
+A review takes from a few seconds to a minute. If it can outlast your sudo timeout during a long `yay -Syu`, let yay keep the credentials alive with `yay --save --sudoloop`.
+
+If the review cannot complete (claude down, no verdict) and makepkg runs in a terminal, the gate asks whether to build without a clean review. Pamac gives makepkg no terminal, so there the build stops.
 
 Manual:
 
 ```
-aur-claude-review some-aur-pkg              # exit 0 = PASS, 1 = FAIL, 2 = error
+aur-claude-review some-aur-pkg              # clone from the AUR and review; exit 0 = PASS, 1 = FAIL, 2 = error
 aur-claude-review --dir ~/build/some-pkg    # review an already-downloaded build dir
 ```
 
+By name, it skips anything in the official signed repos (`pacman -Si`), confirms the rest are genuinely in the AUR (AUR RPC), and recurses into AUR dependencies (static `.SRCINFO` parse — never sources the PKGBUILD). A download that fails for a package that *does* exist in the AUR is treated as a review error (fail-closed), never a silent skip.
+
 ## Knobs (environment variables)
 
-- `AURGUARD=off yay …` — bypass the guard for one command.
-- `AURGUARD_SUDO_PRIME=0` — don't pre-authenticate; let `yay` ask for the password whenever it wants.
-- `AURGUARD_SUDO` — privilege-escalation binary to pre-authenticate with (default: `sudo`, falling back to `doas`).
+- `AURGUARD=off` — bypass the gate for one command, for example `AURGUARD=off yay -S some-pkg`. makepkg inherits it from yay, paru, or a shell.
 - `AUR_REVIEW_MODEL` — model for `claude --model` (default `claude-opus-5-5`).
 - `AUR_REVIEW_NO_CACHE=1` — ignore the verdict cache.
-- `AUR_REVIEW_RECURSE=0` — review only the named package, not its AUR deps.
+- `AUR_REVIEW_RECURSE=0` — by name, review only the named package, not its AUR deps.
 - `AUR_REVIEW_CACHE` — cache dir (default `~/.cache/aur-claude-review`).
 - `AUR_REVIEW_MAX_BYTES` — per-file content cap sent to the model (default 65536).
 
-The verdict cache is keyed by the exact content of the build files, so an updated PKGBUILD is always re-reviewed and a previously-approved one is instant and free.
+The verdict cache is keyed by the exact content of the build files, so an updated PKGBUILD is always re-reviewed and a previously-approved one is instant and free. A VCS package (`-git`, `-svn`, …) is usually reviewed twice per build, because makepkg writes the new `pkgver` into the PKGBUILD after the first review.
 
 ## Editing / iterating
 
@@ -69,13 +80,12 @@ The repo is the single source of truth. After changing a script, rebuild and rei
 
 - **Not a sandbox.** A static LLM review catches the obvious-to-medium supply-chain patterns (curl|bash, exfiltration, reverse shells, obfuscation, suspicious hosts, prompt-injection bait) but a subtle attacker can evade any static review. One layer, not a guarantee — still skim PKGBUILDs you don't trust and prefer building in a container/VM.
 - **A clean PKGBUILD can still fetch a malicious source.** If the payload lives in a remote tarball/repo downloaded at build time, the review sees only the URL, not the payload.
-- **`pamac` and the GUI are not gated.** Only the `yay` CLI is wrapped; pamac builds AUR packages via its own engine, independent of the shell. With AUR support on, Pamac is safe for update notifications only: install and upgrade AUR packages with `yay`. To close this gap completely, turn AUR support off in Pamac.
-- **Fail-closed costs.** If `claude` is down or the AUR is unreachable, an install is blocked (with an interactive override prompt). Use `AURGUARD=off` to bypass deliberately.
+- **Only makepkg is gated.** A tool that builds AUR packages without makepkg, or a build in a chroot (`makechrootpkg`, `pkgctl build`), does not load the gate.
+- **`claude` must be usable by the building user.** The gate also looks in `~/.local/bin` and `~/.claude/local` for a GUI app's shorter PATH. A build that runs as another user finds no logged-in `claude` and fails closed. Run `pamac build` as your user, not with sudo.
+- **Fail-closed costs.** If `claude` is down or the AUR is unreachable, a build is blocked (with an interactive override prompt in a terminal). Use `AURGUARD=off` to bypass deliberately.
 
 ## Uninstall
 
 ```
-./uninstall.sh         # disables the timer and runs `pacman -R`
+./uninstall.sh         # runs `run0 pacman -R aur-claude-guard`
 ```
-
-Then remove the `source …/shell-hook.bash` line from `~/.bashrc`.

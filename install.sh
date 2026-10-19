@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# Build + install aur-claude-guard, then migrate off any earlier user-space
-# (~/.local, ~/.config) copies and the retired update-check timer. Idempotent.
+# Build + install aur-claude-guard, then migrate off the pieces of earlier
+# versions: user-space copies, the update-check timer, and the yay shell hook.
+# Idempotent.
 set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"
 
-echo "==> Building and installing the package (pacman will ask for your sudo password)…"
-# makepkg's -i installs the built package immediately, so the .pkg.tar.zst is a
-# throwaway. Write it to a temp dir (cleaned on exit) instead of littering the repo.
+# The .pkg.tar.zst is a throwaway: write it to a temp dir (cleaned on exit)
+# instead of littering the repo.
 build_tmp="$(mktemp -d)"
 trap 'rm -rf "$build_tmp"' EXIT
-PKGDEST="$build_tmp" makepkg -sif
+
+echo "==> Building the package…"
+PKGDEST="$build_tmp" makepkg -f
+
+echo "==> Installing the package (run0 asks for authentication)…"
+run0 pacman -U --needed "$build_tmp"/*.pkg.tar.*
 
 echo "==> Removing superseded user-space copies (if any)…"
 rm -f ~/.local/bin/aur-claude-review ~/.local/bin/aur-update-check
@@ -20,9 +25,9 @@ rm -f ~/.config/systemd/user/aur-update-check.service ~/.config/systemd/user/aur
 rm -rf ~/.config/aur-claude-guard
 systemctl --user daemon-reload
 
-if ! grep -q 'aur-claude-guard/shell-hook.bash' ~/.bashrc; then
-  echo "==> NOTE: add this to ~/.bashrc to load the yay guard:"
-  echo "      source /usr/share/aur-claude-guard/shell-hook.bash"
+if [ -f ~/.bashrc ] && grep -q 'aur-claude-guard/shell-hook.bash' ~/.bashrc; then
+  echo "==> NOTE: the yay shell hook is retired. Remove its line from ~/.bashrc:"
+  grep -n 'aur-claude-guard/shell-hook.bash' ~/.bashrc | sed 's/^/      /'
 fi
 
-echo "==> Done. Run 'source ~/.bashrc' or open a new terminal to load the guard."
+echo "==> Done. makepkg now reviews every AUR build, from yay and Pamac alike."
