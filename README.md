@@ -7,9 +7,7 @@ LLM-based pre-install security review of AUR build scripts, packaged for pacman.
 | Installed path | Purpose |
 | --- | --- |
 | `/usr/bin/aur-claude-review` | The analyzer. Downloads an AUR package's build files with `yay -G` (no building), feeds `PKGBUILD` + `*.install` + other repo files to `claude -p`, parses the verdict. Recurses into AUR dependencies (static `.SRCINFO` parse — never sources the PKGBUILD). Caches verdicts by content hash. Fails closed. Hardened against prompt injection. |
-| `/usr/bin/aur-update-check` | Runs `yay -Qua` and desktop-notifies when AUR updates exist. Read-only. |
 | `/usr/share/aur-claude-guard/shell-hook.bash` | The `yay` wrapper. Source it from `~/.bashrc`; it gates every install/upgrade that pulls AUR packages on the review. |
-| `/usr/lib/systemd/user/aur-update-check.{service,timer}` | User timer that runs the update check ~5 min after login and once a day. |
 | `/usr/share/doc/aur-claude-guard/README.md` | This file. |
 
 ## Install
@@ -18,7 +16,7 @@ LLM-based pre-install security review of AUR build scripts, packaged for pacman.
 ./install.sh
 ```
 
-It builds the package, installs it (pacman asks for sudo), enables the per-user update-check timer, and reminds you to add the shell guard to your `~/.bashrc`:
+It builds the package, installs it (pacman asks for sudo), and reminds you to add the shell guard to your `~/.bashrc`:
 
 ```
 source /usr/share/aur-claude-guard/shell-hook.bash
@@ -26,7 +24,7 @@ source /usr/share/aur-claude-guard/shell-hook.bash
 
 Add that line, then open a new terminal (or `source ~/.bashrc`) so the `yay` guard loads.
 
-The `claude` CLI must be on your PATH, and **AUR support should be disabled in pamac** so the only path to the AUR is the guarded `yay` (pamac builds AUR packages with its own engine and is not gated — see Limitations).
+The `claude` CLI must be on your PATH. **Install and upgrade AUR packages only with `yay`.** Pamac can keep AUR support on so that it notifies you about AUR updates, but apply those updates with `yay -Syu`, not with Pamac's Apply button: Pamac builds AUR packages with its own engine, so the review does not run (see Limitations).
 
 ## How it decides what to review
 
@@ -63,18 +61,6 @@ aur-claude-review --dir ~/build/some-pkg    # review an already-downloaded build
 
 The verdict cache is keyed by the exact content of the build files, so an updated PKGBUILD is always re-reviewed and a previously-approved one is instant and free.
 
-## Update notifications
-
-Manage the notifier with:
-
-```
-systemctl --user start  aur-update-check.service     # check right now
-systemctl --user list-timers aur-update-check.timer  # next run
-systemctl --user disable --now aur-update-check.timer # turn it off
-```
-
-Apply updates with `yay -Syu`, which goes through the guard.
-
 ## Editing / iterating
 
 The repo is the single source of truth. After changing a script, rebuild and reinstall: `./install.sh`. Verify the installed files match the package with `pacman -Qkk aur-claude-guard`, and see what the package owns with `pacman -Ql aur-claude-guard`. Bump `pkgrel` (or `pkgver`) in the PKGBUILD when you want pacman to treat it as a new version.
@@ -83,7 +69,7 @@ The repo is the single source of truth. After changing a script, rebuild and rei
 
 - **Not a sandbox.** A static LLM review catches the obvious-to-medium supply-chain patterns (curl|bash, exfiltration, reverse shells, obfuscation, suspicious hosts, prompt-injection bait) but a subtle attacker can evade any static review. One layer, not a guarantee — still skim PKGBUILDs you don't trust and prefer building in a container/VM.
 - **A clean PKGBUILD can still fetch a malicious source.** If the payload lives in a remote tarball/repo downloaded at build time, the review sees only the URL, not the payload.
-- **`pamac` and the GUI are not gated.** Only the `yay` CLI is wrapped; pamac builds AUR packages via its own engine, independent of the shell. Disable AUR in pamac and use `yay` for the AUR.
+- **`pamac` and the GUI are not gated.** Only the `yay` CLI is wrapped; pamac builds AUR packages via its own engine, independent of the shell. With AUR support on, Pamac is safe for update notifications only: install and upgrade AUR packages with `yay`. To close this gap completely, turn AUR support off in Pamac.
 - **Fail-closed costs.** If `claude` is down or the AUR is unreachable, an install is blocked (with an interactive override prompt). Use `AURGUARD=off` to bypass deliberately.
 
 ## Uninstall
