@@ -87,5 +87,5 @@ The repo is the single source of truth. After changing a script, rebuild and rei
 ## Uninstall
 
 ```
-./uninstall.sh         # runs `run0 pacman -R aur-claude-guard`
+./uninstall.sh         # runs `run0 pacman -R aur-claude-guard`, then deletes ~/.cache/aur-claude-review
 ```
