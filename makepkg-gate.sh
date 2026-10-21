@@ -21,7 +21,7 @@ _aurguard_gate() {
 	(( EUID != 0 )) || return 0
 
 	# makepkg requires the PKGBUILD in the working directory.
-	local dir=${startdir:-$PWD} top url rc=0 ans
+	local dir=${startdir:-$PWD} top url rc=0 ans qdir
 
 	# Skip the clone of a non-AUR repository, such as an official package from
 	# gitlab.archlinux.org or this project. Review everything else: AUR clones
@@ -59,7 +59,16 @@ _aurguard_gate() {
 			return 0
 		fi
 	fi
-	plainerr "    Bypass once with: AURGUARD=off <command>"
+	# Pamac shows only this text, and AURGUARD=off cannot reach its window or
+	# tray: they started before the variable was set. So list each way out.
+	printf -v qdir %q "$dir"
+	plainerr "    The claude output above gives the reason. If claude is logged out, run:"
+	plainerr "        claude auth login"
+	plainerr "    Then retry the update."
+	plainerr "    To build without the review this time, run one of these in a terminal:"
+	plainerr "        AURGUARD=off pamac update -a"
+	plainerr "        AURGUARD=off yay -Syu"
+	plainerr "        cd $qdir && AURGUARD=off makepkg -si"
 	exit 1
 }
 

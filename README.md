@@ -50,7 +50,7 @@ pamac build some-aur-pkg # same gate
 
 A review takes from a few seconds to a minute. If it can outlast your sudo timeout during a long `yay -Syu`, let yay keep the credentials alive with `yay --save --sudoloop`.
 
-If the review cannot complete (claude down, no verdict) and makepkg runs in a terminal, the gate asks whether to build without a clean review. Pamac gives makepkg no terminal, so there the build stops.
+If the review cannot complete (claude down, no verdict) and makepkg runs in a terminal, the gate asks whether to build without a clean review. Pamac gives makepkg no terminal, so there the build stops. When the build stops, the gate prints the ways out: `claude auth login` for an expired session, and terminal commands that build with `AURGUARD=off`. The Pamac window and tray started before you could set the variable, so the bypass works only from a terminal.
 
 Manual:
 
