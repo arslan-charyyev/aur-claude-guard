@@ -1,7 +1,7 @@
 # Maintainer: Arslan Charyyev <88978221+arslan-charyyev@users.noreply.github.com>
 pkgname=aur-claude-guard
 pkgver=2.0.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Review AUR build scripts with the claude CLI before makepkg runs them (PASS/FAIL gate for yay, paru, and Pamac)"
 arch=('any')
 url="https://github.com/arslan-charyyev/aur-claude-guard"
