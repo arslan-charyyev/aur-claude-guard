@@ -9,8 +9,19 @@
 # Bypass once:  AURGUARD=off yay -S somepkg
 #
 # Writes only to stderr: Pamac and yay parse the stdout of --printsrcinfo and
-# --packagelist. Runs inside makepkg's shell, which has an ERR trap that aborts
+# --packagelist. Pamac does not show that stderr in its window: it sends it to
+# the journal and shows only "Failed to generate <pkg> information". So without
+# a terminal, a stopped build also sends a desktop notification with the reason. Runs inside makepkg's shell, which has an ERR trap that aborts
 # makepkg: every command that can fail must sit in a condition or an || list.
+
+# _aurguard_notify <summary> <body>: a desktop notification, only when makepkg
+# has no terminal (Pamac). Best effort: no notify-send or no session bus is fine.
+_aurguard_notify() {
+	[[ ! -t 2 ]] || return 0
+	command -v notify-send >/dev/null 2>&1 || return 0
+	timeout 5 notify-send --app-name=aur-guard --urgency=critical \
+		--icon=dialog-error -- "$1" "$2" >/dev/null 2>&1 || :
+}
 
 _aurguard_gate() {
 	# Only a top-level makepkg run by a normal user. makepkg re-runs itself
@@ -21,7 +32,8 @@ _aurguard_gate() {
 	(( EUID != 0 )) || return 0
 
 	# makepkg requires the PKGBUILD in the working directory.
-	local dir=${startdir:-$PWD} top url rc=0 ans qdir
+	local dir=${startdir:-$PWD} top url rc=0 ans qdir log= reason pkg
+	pkg=${dir##*/}
 
 	# Skip the clone of a non-AUR repository, such as an official package from
 	# gitlab.archlinux.org or this project. Review everything else: AUR clones
@@ -39,7 +51,14 @@ _aurguard_gate() {
 	fi
 
 	msg "aur-guard: reviewing the build files with claude..." >&2
-	aur-claude-review --dir "$dir" >/dev/null || rc=$?
+	if [[ -t 2 ]]; then
+		# A terminal shows the review's progress as it happens.
+		aur-claude-review --dir "$dir" >/dev/null || rc=$?
+	else
+		# Keep the review's messages: the notification quotes the reason.
+		log=$(aur-claude-review --dir "$dir" 2>&1 >/dev/null) || rc=$?
+		[[ -z $log ]] || printf '%s\n' "$log" >&2
+	fi
 	case $rc in
 		0)
 			msg2 "aur-guard: review passed" >&2
@@ -47,6 +66,8 @@ _aurguard_gate() {
 		1)
 			error "aur-guard: review FAILED, the build files were flagged as suspicious."
 			plainerr "    Inspect them, then bypass once with: AURGUARD=off <command>"
+			_aurguard_notify "aur-guard blocked $pkg" \
+				"The build files were flagged as suspicious. Read the review with: journalctl -b -e"
 			exit 1 ;;
 	esac
 
@@ -59,8 +80,8 @@ _aurguard_gate() {
 			return 0
 		fi
 	fi
-	# Pamac shows only this text, and AURGUARD=off cannot reach its window or
-	# tray: they started before the variable was set. So list each way out.
+	# AURGUARD=off cannot reach the Pamac window or tray: they started before
+	# the variable was set. So list each way out.
 	printf -v qdir %q "$dir"
 	plainerr "    The claude output above gives the reason. If claude is logged out, run:"
 	plainerr "        claude auth login"
@@ -69,8 +90,15 @@ _aurguard_gate() {
 	plainerr "        AURGUARD=off pamac update -a"
 	plainerr "        AURGUARD=off yay -Syu"
 	plainerr "        cd $qdir && AURGUARD=off makepkg -si"
+	# The review prints its reason last, for example the error from claude.
+	reason=$(printf '%s\n' "$log" | grep -v '^[[:space:]]*$' | tail -n 1) || reason=
+	_aurguard_notify "aur-guard could not review $pkg" \
+		"${reason:-The review could not complete.}
+
+If claude is logged out, run: claude auth login
+Then retry the update. To skip the review once, run in a terminal: AURGUARD=off pamac update -a"
 	exit 1
 }
 
 _aurguard_gate
-unset -f _aurguard_gate
+unset -f _aurguard_gate _aurguard_notify

@@ -27,7 +27,7 @@ makepkg loads `/etc/makepkg.conf.d/*.conf` after it parses its arguments and bef
 
 1. Pamac clones the package from `https://aur.archlinux.org/<pkg>.git` into its build directory. Cloning runs no package code.
 2. Pamac runs `makepkg --printsrcinfo` there. makepkg loads the gate, and the gate sends the build files to `claude`.
-3. On a PASS, makepkg continues. Pamac's next makepkg calls for the same build find the verdict in the cache and do not call `claude` again. On a FAIL, makepkg exits, and Pamac reports that the package failed to build. Its details pane shows the reason.
+3. On a PASS, makepkg continues. Pamac's next makepkg calls for the same build find the verdict in the cache and do not call `claude` again. On a FAIL, makepkg exits, and Pamac shows only "Failed to generate <pkg> information". Pamac sends the gate's messages to the journal, not to its window. So when makepkg has no terminal, the gate also sends a desktop notification with the reason (`notify-send`, from libnotify).
 
 What the gate reviews:
 
@@ -50,7 +50,7 @@ pamac build some-aur-pkg # same gate
 
 A review takes from a few seconds to a minute. If it can outlast your sudo timeout during a long `yay -Syu`, let yay keep the credentials alive with `yay --save --sudoloop`.
 
-If the review cannot complete (claude down, no verdict) and makepkg runs in a terminal, the gate asks whether to build without a clean review. Pamac gives makepkg no terminal, so there the build stops. When the build stops, the gate prints the ways out: `claude auth login` for an expired session, and terminal commands that build with `AURGUARD=off`. The Pamac window and tray started before you could set the variable, so the bypass works only from a terminal.
+If the review cannot complete (claude down, no verdict) and makepkg runs in a terminal, the gate asks whether to build without a clean review. Pamac gives makepkg no terminal, so there the build stops. When the build stops, the gate prints the ways out, and without a terminal it puts them in the desktop notification too: `claude auth login` for an expired session, and terminal commands that build with `AURGUARD=off`. The Pamac window and tray started before you could set the variable, so the bypass works only from a terminal.
 
 Manual:
 

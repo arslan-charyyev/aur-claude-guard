@@ -1,14 +1,15 @@
 # Maintainer: Arslan Charyyev <88978221+arslan-charyyev@users.noreply.github.com>
 pkgname=aur-claude-guard
-pkgver=2.0.0
-pkgrel=2
+pkgver=2.1.0
+pkgrel=1
 pkgdesc="Review AUR build scripts with the claude CLI before makepkg runs them (PASS/FAIL gate for yay, paru, and Pamac)"
 arch=('any')
 url="https://github.com/arslan-charyyev/aur-claude-guard"
 license=('MIT')
 # pacman 7 brought the makepkg.conf.d drop-in directory that loads the gate.
 depends=('bash' 'curl' 'git' 'pacman>=7')
-optdepends=('claude: the LLM CLI used to perform the review (install separately; must be on PATH)')
+optdepends=('claude: the LLM CLI used to perform the review (install separately; must be on PATH)'
+            'libnotify: desktop notification when Pamac stops a build')
 backup=('etc/makepkg.conf.d/aur-claude-guard.conf')
 install="$pkgname.install"
 # Local, git-tracked sources: integrity is provided by git, so checksums are SKIP.

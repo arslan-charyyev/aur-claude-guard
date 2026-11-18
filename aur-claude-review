@@ -208,7 +208,10 @@ $PROMPT_TAIL"
   # Parse the last VERDICT line. No clear verdict => fail closed.
   verdict="$(printf '%s' "$out" | grep -oE 'VERDICT:[[:space:]]*(PASS|FAIL)' | tail -n1 | grep -oE '(PASS|FAIL)')"
   if [ -z "$verdict" ]; then
-    err "${c_red}[$label] could not parse a verdict — treating as FAIL${c_rst}"
+    # Quote claude's first line: an error such as an expired login shows there.
+    local said
+    said="$(printf '%s\n' "$out" | grep -m1 -v '^[[:space:]]*$' | cut -c1-200)"
+    err "${c_red}[$label] could not parse a verdict — treating as FAIL. claude said: $said${c_rst}"
     return 2
   fi
 
